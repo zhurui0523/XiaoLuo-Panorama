@@ -2,6 +2,8 @@
 
 [![npm version](https://img.shields.io/badge/npm-v1.0.0-blue.svg)](https://www.npmjs.com/package/xiaoluo-vr-panorama)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
+<img width="2559" height="1599" alt="image" src="https://github.com/user-attachments/assets/e5a7dfde-5f4d-4f29-a75b-5941a021efc2" />
+
 
 **小逻-VR全景浏览器 (Xiaoluo VR Panorama)** 是一款专为 React 开发的专业级 720° 沉浸式全景虚拟现实（VR）浏览器与生成器组件库。
 
