@@ -1,11 +1,27 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "xiaoluo-vr-panorama",
+  "private": false,
+  "version": "1.0.0",
   "type": "module",
+  "description": "小逻-VR全景浏览器: Professional 720° immersive panorama VR viewer and creator built in React with three-dimensional perspective correction.",
+  "main": "./dist/xiaoluo-vr-panorama.umd.cjs",
+  "module": "./dist/xiaoluo-vr-panorama.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/xiaoluo-vr-panorama.js",
+      "require": "./dist/xiaoluo-vr-panorama.umd.cjs"
+    },
+    "./dist/style.css": "./dist/xiaoluo-vr-panorama.css"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:lib": "vite build --config vite.lib.config.ts",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -25,6 +41,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
@@ -32,6 +49,13 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "vite-plugin-dts": "^5.0.3"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "motion": "^11.0.0 || ^12.0.0",
+    "lucide-react": "^0.400.0 || ^0.500.0",
+    "pannellum": "^2.5.7"
   }
 }

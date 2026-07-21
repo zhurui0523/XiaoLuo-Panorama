@@ -32,7 +32,7 @@ declare global {
   }
 }
 
-interface PanoramaViewerProps {
+export interface PanoramaViewerProps {
   imageUrl: string;
   onClose: () => void;
   title?: string;
