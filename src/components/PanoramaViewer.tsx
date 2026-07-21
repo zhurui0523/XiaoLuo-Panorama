@@ -53,7 +53,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [snapshotting, setSnapshotting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProTools, setShowProTools] = useState(false);
-  const [isHealing, setIsHealing] = useState(false);
   
   const fovRef = useRef(110);
   const [fov, setFovState] = useState(110);
@@ -412,117 +411,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }, [isShiftMode]);
 
-  // Pure Client-Side Canvas 0-Degree Seam Blender
-  // It loads the image, crops strips from both edges, blends them linearly, and updates the image!
-  const healSeam = async () => {
-    if (isHealing) return;
-    setIsHealing(true);
-    setError(null);
 
-    try {
-      // 1. Create a helper image element
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load image for seam blending"));
-        img.src = currentUrl;
-      });
-
-      const w = img.width;
-      const h = img.height;
-
-      // 2. Setup canvas
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error("Could not construct 2D context");
-
-      // Draw original image
-      ctx.drawImage(img, 0, 0);
-
-      // Width of the blending zone (e.g. 80 pixels)
-      const blendWidth = Math.min(120, Math.floor(w * 0.04));
-
-      // Create offscreen buffer for blending
-      const leftStrip = ctx.getImageData(0, 0, blendWidth, h);
-      const rightStrip = ctx.getImageData(w - blendWidth, 0, blendWidth, h);
-
-      // Linearly blend the left strip and right strip
-      // We will create a merged strip and apply linear fade
-      const mergedStrip = ctx.createImageData(blendWidth, h);
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < blendWidth; x++) {
-          const idx = (y * blendWidth + x) * 4;
-          const origIdx = (y * w + x) * 4; // for left strip
-          const rightOrigIdx = (y * w + (w - blendWidth + x)) * 4; // for right strip
-
-          // blending weight alpha from 0 (all left) to 1 (all right)
-          const alpha = x / blendWidth;
-
-          // Blended RGB
-          mergedStrip.data[idx] = Math.round((1 - alpha) * leftStrip.data[x * 4 + y * blendWidth * 4] + alpha * rightStrip.data[x * 4 + y * blendWidth * 4]);
-          mergedStrip.data[idx + 1] = Math.round((1 - alpha) * leftStrip.data[x * 4 + y * blendWidth * 4 + 1] + alpha * rightStrip.data[x * 4 + y * blendWidth * 4 + 1]);
-          mergedStrip.data[idx + 2] = Math.round((1 - alpha) * leftStrip.data[x * 4 + y * blendWidth * 4 + 2] + alpha * rightStrip.data[x * 4 + y * blendWidth * 4 + 2]);
-          mergedStrip.data[idx + 3] = 255; // Solid opaque
-        }
-      }
-
-      // Draw blended strip over the left edge
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = blendWidth;
-      tempCanvas.height = h;
-      tempCanvas.getContext('2d')?.putImageData(mergedStrip, 0, 0);
-
-      // Blend seamlessly by creating an alpha-gradient mask over the edges
-      // Draw merged strip on left side with linear gradient opacity
-      ctx.save();
-      ctx.globalAlpha = 1.0;
-      // Draw right edge fading into left edge
-      ctx.drawImage(tempCanvas, 0, 0);
-      // Copy some of the blended strip to the right edge with reverse gradient
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(tempCanvas, 0, 0);
-      ctx.restore();
-
-      const healedUrl = canvas.toDataURL('image/jpeg', 0.95);
-      
-      // Update local view
-      setCurrentUrl(healedUrl);
-      if (onSeamHealed) {
-        onSeamHealed(healedUrl);
-      }
-      
-      // Notify success
-      setTimeout(() => {
-        setIsHealing(false);
-      }, 800);
-
-    } catch (err: any) {
-      console.error("Seam healing error:", err);
-      // Fallback via API if server available, else show warning
-      try {
-        const response = await fetch('/api/panorama/heal-seam', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: currentUrl })
-        });
-        const data = await response.json();
-        if (data.url) {
-          setCurrentUrl(data.url);
-          if (onSeamHealed) onSeamHealed(data.url);
-        } else {
-          throw new Error(data.error || "修复失败");
-        }
-      } catch (apiErr) {
-        alert("接缝一键修复失败，请换张图重试。");
-      }
-      setIsHealing(false);
-    }
-  };
 
   const takeArchitecturalCapture = () => {
     if (viewerRef.current) {
@@ -748,25 +637,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 />
               </div>
 
-              {/* AI Seam Healing Tool */}
-              <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5 text-amber-500" />
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">全景边界对齐</label>
-                </div>
-                <button 
-                  onClick={healSeam}
-                  disabled={isHealing}
-                  className={`w-full py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border ${
-                    isHealing 
-                      ? "bg-slate-50 text-slate-300 border-slate-100" 
-                      : "bg-amber-50 text-amber-600 border-amber-100 hover:bg-amber-100/50"
-                  }`}
-                >
-                  {isHealing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
-                  <span>{isHealing ? '正在重塑无缝拼合...' : '接缝一键修复 (Seam Blender)'}</span>
-                </button>
-              </div>
+
             </div>
 
             <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
