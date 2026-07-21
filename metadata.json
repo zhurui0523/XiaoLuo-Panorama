@@ -1,0 +1,6 @@
+{
+  "name": "小逻-VR全景浏览器",
+  "description": "专业级 720° 沉浸式全景 VR 生图与探索引擎，内置高级相机透视校正与自由漫游算法。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
