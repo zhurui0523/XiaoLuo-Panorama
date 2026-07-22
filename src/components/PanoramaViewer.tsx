@@ -34,6 +34,7 @@ export interface PanoramaViewerProps {
   theme?: 'light' | 'dark';
   cornerRadius?: React.CSSProperties['borderRadius'];
   imageLoadStrategy?: 'fetch' | 'direct';
+  captureMode?: 'instant' | 'ratio';
   onCapture?: (capture: PanoramaCaptureResult) => void | Promise<void>;
   className?: string;
   style?: React.CSSProperties;
@@ -42,7 +43,94 @@ export interface PanoramaViewerProps {
 export interface PanoramaCaptureResult {
   dataUrl: string;
   kind: 'viewport' | 'architectural';
+  aspectRatio?: PanoramaCaptureRatio;
 }
+
+export type PanoramaCaptureRatio =
+  | 'auto'
+  | '1:1'
+  | '9:16'
+  | '16:9'
+  | '3:4'
+  | '4:3'
+  | '3:2'
+  | '2:3'
+  | '5:4'
+  | '4:5'
+  | '21:9'
+  | '1:4'
+  | '4:1';
+
+interface CaptureRatioOption {
+  id: PanoramaCaptureRatio;
+  label: string;
+  value: number | null;
+}
+
+const CAPTURE_RATIO_OPTIONS: CaptureRatioOption[] = [
+  { id: 'auto', label: '自适应', value: null },
+  { id: '1:1', label: '1:1', value: 1 },
+  { id: '9:16', label: '9:16', value: 9 / 16 },
+  { id: '16:9', label: '16:9', value: 16 / 9 },
+  { id: '3:4', label: '3:4', value: 3 / 4 },
+  { id: '4:3', label: '4:3', value: 4 / 3 },
+  { id: '3:2', label: '3:2', value: 3 / 2 },
+  { id: '2:3', label: '2:3', value: 2 / 3 },
+  { id: '5:4', label: '5:4', value: 5 / 4 },
+  { id: '4:5', label: '4:5', value: 4 / 5 },
+  { id: '21:9', label: '21:9', value: 21 / 9 },
+  { id: '1:4', label: '1:4', value: 1 / 4 },
+  { id: '4:1', label: '4:1', value: 4 },
+];
+
+const cropCaptureToRatio = async (
+  dataUrl: string,
+  ratio: CaptureRatioOption,
+): Promise<string> => {
+  if (ratio.value === null) return dataUrl;
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const nextImage = new Image();
+    nextImage.onload = () => resolve(nextImage);
+    nextImage.onerror = () => reject(new Error('Captured image could not be decoded'));
+    nextImage.src = dataUrl;
+  });
+
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const sourceRatio = sourceWidth / sourceHeight;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+
+  if (sourceRatio > ratio.value) {
+    cropWidth = sourceHeight * ratio.value;
+  } else {
+    cropHeight = sourceWidth / ratio.value;
+  }
+
+  const sourceX = (sourceWidth - cropWidth) / 2;
+  const sourceY = (sourceHeight - cropHeight) / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(cropWidth));
+  canvas.height = Math.max(1, Math.round(cropHeight));
+  const context = canvas.getContext('2d');
+
+  if (!context) throw new Error('Canvas 2D context is unavailable');
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+
+  return canvas.toDataURL('image/png');
+};
 
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ 
   imageUrl, 
@@ -53,6 +141,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   theme = 'light',
   cornerRadius = 0,
   imageLoadStrategy = 'fetch',
+  captureMode = 'instant',
   onCapture,
   className = '',
   style,
@@ -63,6 +152,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [snapshotting, setSnapshotting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProTools, setShowProTools] = useState(false);
+  const [showCaptureTools, setShowCaptureTools] = useState(false);
+  const [captureRatio, setCaptureRatio] = useState<PanoramaCaptureRatio>('16:9');
   
   const fovRef = useRef(110);
   const [fov, setFovState] = useState(110);
@@ -278,7 +369,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [showFlash, setShowFlash] = useState(false);
 
   // High resolution viewport snapshot capture
-  const takeSnapshot = (kind: PanoramaCaptureResult['kind'] = 'viewport') => {
+  const takeSnapshot = (
+    kind: PanoramaCaptureResult['kind'] = 'viewport',
+    requestedRatio: PanoramaCaptureRatio = 'auto',
+  ) => {
     if (snapshotting || loading) return;
     
     setSnapshotting(true);
@@ -294,23 +388,38 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       }
 
       try {
-        const dataUrl = core.captureScreenshot();
+        const sourceDataUrl = core.captureScreenshot();
         
-        if (!dataUrl || dataUrl.length < 500) {
+        if (!sourceDataUrl || sourceDataUrl.length < 500) {
           throw new Error("Captured image data is corrupted or empty");
         }
 
+        const ratioOption = CAPTURE_RATIO_OPTIONS.find(
+          (option) => option.id === requestedRatio,
+        ) ?? CAPTURE_RATIO_OPTIONS[0];
+        const dataUrl = kind === 'viewport'
+          ? await cropCaptureToRatio(sourceDataUrl, ratioOption)
+          : sourceDataUrl;
+
         if (onCapture) {
-          await onCapture({ dataUrl, kind });
+          await onCapture({
+            dataUrl,
+            kind,
+            aspectRatio: kind === 'viewport' ? ratioOption.id : undefined,
+          });
         } else {
           const link = document.createElement('a');
           link.href = dataUrl;
-          link.download = `VR_view_snapshot_${Date.now()}.png`;
+          const ratioSuffix = kind === 'viewport' && ratioOption.id !== 'auto'
+            ? `_${ratioOption.id.replace(':', 'x')}`
+            : '';
+          link.download = `VR_view_snapshot${ratioSuffix}_${Date.now()}.png`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
         }
 
+        if (kind === 'viewport') setShowCaptureTools(false);
         setTimeout(() => setSnapshotting(false), 800);
       } catch (err) {
         console.error("Capture error:", err);
@@ -350,6 +459,20 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   };
 
+  const selectedCaptureRatio = CAPTURE_RATIO_OPTIONS.find(
+    (option) => option.id === captureRatio,
+  ) ?? CAPTURE_RATIO_OPTIONS[0];
+
+  const toggleCaptureTools = () => {
+    if (captureMode === 'instant') {
+      takeSnapshot();
+      return;
+    }
+
+    setShowProTools(false);
+    setShowCaptureTools((visible) => !visible);
+  };
+
   const resetProTools = () => {
     setFov(110);
     setPitch(0);
@@ -382,6 +505,12 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       className={`xiaoluo-panorama-viewer ${theme === 'dark' ? 'dark' : ''} absolute inset-0 z-[100] flex items-center justify-center bg-[#f3f4f6] dark:bg-[#0a0a0f] overflow-hidden ${className}`}
       data-theme={theme}
       ref={containerRef}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape' && showCaptureTools) {
+          event.stopPropagation();
+          setShowCaptureTools(false);
+        }
+      }}
       style={{
         '--h-offset': `${horizontalOffset}px`,
         '--v-offset': `${verticalOffset}px`,
@@ -409,7 +538,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           </button>
 
           <button
-            onClick={() => setShowProTools(!showProTools)}
+            onClick={() => {
+              setShowCaptureTools(false);
+              setShowProTools(!showProTools);
+            }}
             className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               showProTools 
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
@@ -424,12 +556,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
         <div className="flex items-center gap-1.5 pr-2 sm:pr-4 border-r border-slate-100 dark:border-[#2a2a3a]">
           <button
-            onClick={() => takeSnapshot()}
+            onClick={toggleCaptureTools}
             disabled={snapshotting || loading}
             className={`xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 ${
+              showCaptureTools ? 'bg-indigo-600 text-white dark:text-white' : ''
+            } ${
               snapshotting || loading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
-            title="捕获当前视角截图"
+            aria-pressed={captureMode === 'ratio' ? showCaptureTools : undefined}
+            title={captureMode === 'ratio' ? '按比例截取当前视角' : '捕获当前视角截图'}
           >
             {snapshotting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
           </button>
@@ -480,6 +615,93 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           <span className="hidden sm:inline">{closeText || '关闭'}</span>
         </button>
       </div>
+
+      <AnimatePresence>
+        {captureMode === 'ratio' && showCaptureTools && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="xiaoluo-panorama-capture-guide"
+              aria-hidden="true"
+            >
+              <div
+                className={`xiaoluo-panorama-capture-frame ${
+                  selectedCaptureRatio.value === null
+                    ? 'is-auto'
+                    : selectedCaptureRatio.value >= 1
+                      ? 'is-landscape'
+                      : 'is-portrait'
+                }`}
+                style={{
+                  aspectRatio: selectedCaptureRatio.value ?? undefined,
+                  '--xiaoluo-capture-ratio': selectedCaptureRatio.value ?? 1,
+                } as React.CSSProperties}
+              >
+                <span>{selectedCaptureRatio.label}</span>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              className="xiaoluo-panorama-capture-panel"
+              role="dialog"
+              aria-label="截图比例"
+            >
+              <div className="xiaoluo-panorama-capture-header">
+                <span>截图比例</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCaptureTools(false)}
+                  title="关闭比例截图"
+                  aria-label="关闭比例截图"
+                >
+                  <X />
+                </button>
+              </div>
+
+              <div className="xiaoluo-panorama-ratio-grid">
+                {CAPTURE_RATIO_OPTIONS.map((option) => {
+                  const selected = option.id === captureRatio;
+                  return (
+                    <button
+                      type="button"
+                      key={option.id}
+                      className="xiaoluo-panorama-ratio-option"
+                      data-selected={selected}
+                      aria-pressed={selected}
+                      onClick={() => setCaptureRatio(option.id)}
+                    >
+                      <span
+                        className={`xiaoluo-panorama-ratio-mark ${option.value === null ? 'is-auto' : ''}`}
+                        style={{ aspectRatio: option.value ?? undefined }}
+                      />
+                      <span>{option.label}</span>
+                      {selected && <Check className="xiaoluo-panorama-ratio-check" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="xiaoluo-panorama-capture-footer">
+                <span>{selectedCaptureRatio.label}</span>
+                <button
+                  type="button"
+                  className="xiaoluo-panorama-capture-confirm"
+                  disabled={snapshotting || loading}
+                  onClick={() => takeSnapshot('viewport', captureRatio)}
+                >
+                  {snapshotting ? <Loader2 className="animate-spin" /> : <Camera />}
+                  <span>截图</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Advanced Pro Camera Tools Panel */}
       <AnimatePresence>
