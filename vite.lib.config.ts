@@ -4,6 +4,19 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import dts from 'vite-plugin-dts';
 
+const unwrapCssLayers = {
+  postcssPlugin: 'xiaoluo-unwrap-css-layers',
+  AtRule: {
+    layer(atRule: { nodes?: unknown[]; replaceWith: (...nodes: unknown[]) => void; remove: () => void }) {
+      if (atRule.nodes?.length) {
+        atRule.replaceWith(...atRule.nodes);
+      } else {
+        atRule.remove();
+      }
+    },
+  },
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -19,6 +32,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
+    },
+  },
+  css: {
+    postcss: {
+      plugins: [unwrapCssLayers],
     },
   },
   build: {
