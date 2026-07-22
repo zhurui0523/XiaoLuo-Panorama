@@ -733,7 +733,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               </div>
               <button 
                 onClick={resetProTools}
-                className="p-1.5 hover:bg-slate-50 dark:hover:bg-[#252535] rounded-full text-slate-400 dark:text-[#8888a0] hover:text-slate-600 dark:hover:text-[#e8e8ed] transition-all"
+                className="xiaoluo-panorama-pro-reset p-1.5 hover:bg-slate-50 dark:hover:bg-[#252535] rounded-full text-slate-400 dark:text-[#8888a0] hover:text-slate-600 dark:hover:text-[#e8e8ed] transition-all"
                 title="重置全部微调"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -763,65 +763,65 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               {/* FOV Slider */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">镜头焦距 (FOV)</label>
-                  <span className="text-xs font-mono text-indigo-600 font-bold">{fov}°</span>
+                  <label className="xiaoluo-panorama-pro-label text-[10px] font-black text-slate-400 uppercase tracking-wider">镜头焦距 (FOV)</label>
+                  <span className="xiaoluo-panorama-pro-value text-xs font-mono text-indigo-600 font-bold">{fov}°</span>
                 </div>
                 <input 
                   type="range" min="40" max="140" step="1" 
                   value={fov} onChange={(e) => setFov(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                  className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
                 />
               </div>
 
               {/* Spatial Offset Sliders */}
-              <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
+              <div className="xiaoluo-panorama-pro-section space-y-4 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">空间位移补偿 (Offset)</label>
+                  <ChevronRight className="xiaoluo-panorama-pro-section-icon w-3 h-3 text-slate-400" />
+                  <label className="xiaoluo-panorama-pro-section-label text-[10px] font-black text-slate-400 uppercase tracking-wider">空间位移补偿 (Offset)</label>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">水平偏移 (X-Pivot)</label>
-                    <span className="text-[10px] font-mono text-slate-400">{horizontalOffset}px</span>
+                    <label className="xiaoluo-panorama-pro-label text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">水平偏移 (X-Pivot)</label>
+                    <span className="xiaoluo-panorama-pro-muted-value text-[10px] font-mono text-slate-400">{horizontalOffset}px</span>
                   </div>
                   <input 
                     type="range" min="-80" max="80" step="1" 
                     value={horizontalOffset} onChange={(e) => setHorizontalOffset(Number(e.target.value))}
-                    className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
+                    className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">垂直偏移 (Y-Pivot)</label>
-                    <span className="text-[10px] font-mono text-slate-400">{verticalOffset}px</span>
+                    <label className="xiaoluo-panorama-pro-label text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">垂直偏移 (Y-Pivot)</label>
+                    <span className="xiaoluo-panorama-pro-muted-value text-[10px] font-mono text-slate-400">{verticalOffset}px</span>
                   </div>
                   <input 
                     type="range" min="-40" max="40" step="1" 
                     value={verticalOffset} onChange={(e) => setVerticalOffset(Number(e.target.value))}
-                    className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
+                    className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
                   />
                 </div>
               </div>
 
               {/* Perspective Correction */}
-              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
+              <div className="xiaoluo-panorama-pro-section space-y-2 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">视线畸变拉伸 (Perspective)</label>
-                  <span className="text-xs font-mono text-indigo-600 font-bold">{perspectiveCorrection}°</span>
+                  <label className="xiaoluo-panorama-pro-section-label text-[10px] font-black text-slate-400 uppercase tracking-wider">视线畸变拉伸 (Perspective)</label>
+                  <span className="xiaoluo-panorama-pro-value text-xs font-mono text-indigo-600 font-bold">{perspectiveCorrection}°</span>
                 </div>
                 <input 
                   type="range" min="-12" max="12" step="0.5" 
                   value={perspectiveCorrection} onChange={(e) => setPerspectiveCorrection(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                  className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
                 />
               </div>
 
 
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-[#2a2a3a] space-y-2">
+            <div className="xiaoluo-panorama-pro-footer mt-5 pt-4 border-t border-slate-100 dark:border-[#2a2a3a] space-y-2">
               <button 
                 onClick={takeArchitecturalCapture}
                 className="xiaoluo-panorama-arch-capture w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 dark:shadow-none rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
@@ -829,7 +829,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 <Camera className="w-3.5 h-3.5" />
                 <span>移轴平面截图 (Arch-Capture)</span>
               </button>
-              <p className="text-[8px] text-slate-400 text-center leading-normal">
+              <p className="xiaoluo-panorama-pro-hint text-[8px] text-slate-400 text-center leading-normal">
                 自动对齐地平线，输出透视正确的 2D 空间构图图片
               </p>
             </div>
