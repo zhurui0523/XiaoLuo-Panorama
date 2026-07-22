@@ -19,7 +19,9 @@ import {
   Eye,
   Check,
   Plus,
-  Minus
+  Minus,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PanoramaCore } from './PanoramaCore';
@@ -523,15 +525,17 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
       {/* Floating Control Bar - Styled Exactly like Image 1 */}
       <div className="xiaoluo-panorama-toolbar absolute bottom-3 sm:bottom-6 z-20 flex items-center justify-between w-auto max-w-[calc(100%-1rem)] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.3)] rounded-full px-3 sm:px-6 py-2.5 gap-1.5 sm:gap-4 whitespace-nowrap">
+        <div className="xiaoluo-panorama-toolbar-actions">
         <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-2 sm:pr-4">
           <button
             onClick={toggleWalking}
             className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
-              isWalking 
-                ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" 
+              isWalking
+                ? "bg-emerald-500 text-white"
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="自由漫游模式: 使用 WASD 键或方向键走动"
+            aria-pressed={isWalking}
           >
             <Footprints className="w-4 h-4" />
             <span className="hidden sm:inline">{isWalking ? '正在漫游' : 'WASD 漫游'}</span>
@@ -543,11 +547,12 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               setShowProTools(!showProTools);
             }}
             className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
-              showProTools 
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
+              showProTools
+                ? "bg-indigo-600 text-white"
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="镜头微调与高级参数"
+            aria-pressed={showProTools}
           >
             <Sliders className="w-4 h-4" />
             <span className="hidden sm:inline">视觉矫正</span>
@@ -586,27 +591,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           </button>
         </div>
 
-        {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
-        <div className="xiaoluo-panorama-zoom flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
-          <button 
-            onClick={() => setFov(Math.min(150, fov + 5))}
-            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
-            title="缩小"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono min-w-[34px] text-center">
-            {Math.round((110 / fov) * 100)}%
-          </span>
-          <button 
-            onClick={() => setFov(Math.max(40, fov - 5))}
-            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
-            title="放大"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
         <button
           onClick={onClose}
           className="xiaoluo-panorama-exit flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
@@ -614,6 +598,36 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           <X className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{closeText || '关闭'}</span>
         </button>
+        </div>
+
+        {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
+        <div className="xiaoluo-panorama-zoom flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
+          <button
+            onClick={() => setFov(Math.min(150, fov + 5))}
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
+            title="缩小"
+          >
+            <Minus className="xiaoluo-panorama-zoom-icon-default w-3.5 h-3.5" />
+            <ZoomOut className="xiaoluo-panorama-zoom-icon-compact w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            className="xiaoluo-panorama-zoom-value font-mono min-w-[34px] text-center"
+            onClick={() => setFov(110)}
+            title="重置缩放"
+            aria-label="重置缩放"
+          >
+            {Math.round((110 / fov) * 100)}%
+          </button>
+          <button
+            onClick={() => setFov(Math.max(40, fov - 5))}
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
+            title="放大"
+          >
+            <Plus className="xiaoluo-panorama-zoom-icon-default w-3.5 h-3.5" />
+            <ZoomIn className="xiaoluo-panorama-zoom-icon-compact w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>
