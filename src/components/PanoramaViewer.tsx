@@ -22,15 +22,8 @@ import {
   Minus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import 'pannellum/src/css/pannellum.css';
-import 'pannellum';
-
-// Declare pannellum on window for TypeScript
-declare global {
-  interface Window {
-    pannellum: any;
-  }
-}
+import { PanoramaCore } from './PanoramaCore';
+import type { PanoramaCoreHandle, PanoramaViewState } from './PanoramaCore';
 
 export interface PanoramaViewerProps {
   imageUrl: string;
@@ -84,17 +77,22 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const animationRef = useRef<number | null>(null);
   const momentumRef = useRef({ x: 0, z: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<any>(null);
+  const coreRef = useRef<PanoramaCoreHandle>(null);
 
   useEffect(() => {
     setCurrentUrl(imageUrl);
   }, [imageUrl]);
 
-  // Capture keyboard events for WASD walking
+  // Capture WASD only while walk mode is enabled and this viewer owns focus.
   useEffect(() => {
+    if (!isWalking) return;
+    const container = containerRef.current;
+    if (!container) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
+        e.preventDefault();
         setKeysPressed(prev => ({ ...prev, [k]: true }));
       }
     };
@@ -103,13 +101,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       setKeysPressed(prev => ({ ...prev, [k]: false }));
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('keyup', handleKeyUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('keyup', handleKeyUp);
+      setKeysPressed({});
     };
-  }, []);
+  }, [isWalking]);
 
   // WASD Walk Simulation Engine (creates actual parallax perspective shift inside WebGL view)
   useEffect(() => {
@@ -148,18 +147,17 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         bob: bobAmount
       }));
 
-      // Sync with Pannellum Viewer for actual yaw/pitch panning feel during walking
-      if (viewerRef.current && (isMoving || speed > 0.01)) {
-        const currentFov = viewerRef.current.getHfov();
-        const currentYaw = viewerRef.current.getYaw();
+      // Sync with the embedded core for yaw / FOV movement.
+      const view = coreRef.current?.getView();
+      if (view && (isMoving || speed > 0.01)) {
         
         // Forward walk decreases/increases FOV slightly to convey depth motion
         const fovTarget = momentumRef.current.z * -0.4;
-        viewerRef.current.setHfov(Math.max(50, Math.min(125, currentFov + fovTarget)), false);
+        const nextFov = Math.max(50, Math.min(125, view.hfov + fovTarget));
         
         // Sidestepping turns the camera view yaw slightly
         const yawShift = momentumRef.current.x * 0.15;
-        viewerRef.current.setYaw(currentYaw + yawShift, false);
+        coreRef.current?.setView({ hfov: nextFov, yaw: view.yaw + yawShift });
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -172,7 +170,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   }, [isWalking, keysPressed]);
 
   const toggleWalking = () => {
-    setIsWalking(!isWalking);
+    setIsWalking((enabled) => !enabled);
+    requestAnimationFrame(() => coreRef.current?.focus());
   };
 
   const toggleFullscreen = () => {
@@ -193,11 +192,17 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     setLoading(true);
     setError(null);
 
+    let activeObjectUrl: string | null = null;
+    let cancelled = false;
+
     const fetchImage = async () => {
+      setLocalUrl(null);
       try {
         if (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:')) {
-          setLocalUrl(currentUrl);
-          setLoading(false);
+          if (!cancelled) {
+            setLocalUrl(currentUrl);
+            setLoading(false);
+          }
           return;
         }
 
@@ -215,116 +220,30 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         
         if (!blob || blob.size === 0) throw new Error("Received empty blob");
 
-        const url = URL.createObjectURL(blob);
-        setLocalUrl(url);
+        activeObjectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(activeObjectUrl);
+          activeObjectUrl = null;
+          return;
+        }
+        setLocalUrl(activeObjectUrl);
         setLoading(false);
       } catch (err) {
         console.error("Failed to fetch panorama image:", err);
-        setLocalUrl(currentUrl); // Try direct fallback
-        setLoading(false);
+        if (!cancelled) {
+          setLocalUrl(currentUrl); // Try direct fallback
+          setLoading(false);
+        }
       }
     };
 
-    fetchImage();
+    void fetchImage();
 
     return () => {
-      if (localUrl && localUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(localUrl);
-      }
+      cancelled = true;
+      if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
     };
   }, [currentUrl]);
-
-  // Hack HTML Canvas to always preserve drawing buffer for Pannellum high quality screen capturing
-  useEffect(() => {
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    (HTMLCanvasElement.prototype.getContext as any) = function(type: string, attributes: any) {
-      if (type.includes('webgl')) {
-        attributes = attributes || {};
-        attributes.preserveDrawingBuffer = true;
-        attributes.alpha = false;
-      }
-      return originalGetContext.call(this, type, attributes);
-    };
-    
-    return () => {
-      HTMLCanvasElement.prototype.getContext = originalGetContext;
-    };
-  }, []);
-
-  // Initialize Pannellum
-  useEffect(() => {
-    if (localUrl && containerRef.current && window.pannellum) {
-      try {
-        if (viewerRef.current) {
-          viewerRef.current.destroy();
-        }
-
-        viewerRef.current = window.pannellum.viewer('pannellum-container', {
-          type: 'equirectangular',
-          panorama: localUrl,
-          pitch: pitch,
-          yaw: yaw,
-          hfov: fov,
-          autoLoad: true,
-          showZoomCtrl: false,
-          showFullscreenCtrl: false,
-          backgroundColor: [243, 244, 246], // Soft light gray background matching image 1
-          compass: false,
-          keyboardZoom: true,
-          mouseZoom: true,
-          draggable: true,
-          minHfov: 40,
-          maxHfov: 150,
-          hfovBounds: [40, 150],
-          friction: 0.15,
-          vOffset: 0,
-          multiRes: false,
-          crossOrigin: 'anonymous'
-        });
-
-        // Anti-pole pinching zoom scaling
-        viewerRef.current.on('viewchange', () => {
-          const p = viewerRef.current.getPitch();
-          const y = viewerRef.current.getYaw();
-          setPitch(Math.round(p));
-          setYaw(Math.round(y));
-
-          const absPitch = Math.abs(p);
-          if (absPitch > 60) {
-            const extraFov = (absPitch - 60) * 0.35;
-            viewerRef.current.setHfov(fovRef.current + extraFov, false);
-          } else {
-            viewerRef.current.setHfov(fovRef.current, false);
-          }
-        });
-
-        viewerRef.current.on('zoomchange', (newFov: number) => {
-          const rounded = Math.round(newFov);
-          if (rounded !== fovRef.current) {
-            setFov(rounded);
-          }
-        });
-
-        viewerRef.current.on('load', () => setLoading(false));
-        viewerRef.current.on('error', (err: any) => {
-          console.error("Pannellum error:", err);
-          setError(typeof err === 'string' ? err : '加载全景图时出错');
-          setLoading(false);
-        });
-      } catch (e) {
-        console.error("Failed to initialize Pannellum:", e);
-        setError("无法初始化全景查看器");
-        setLoading(false);
-      }
-    }
-
-    return () => {
-      if (viewerRef.current) {
-        viewerRef.current.destroy();
-        viewerRef.current = null;
-      }
-    };
-  }, [localUrl]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -346,25 +265,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     setTimeout(() => {
       setShowFlash(false);
       
-      const container = document.getElementById('pannellum-container');
-      const viewer = viewerRef.current;
-      
-      if (!viewer) {
+      const core = coreRef.current;
+      if (!core) {
         setSnapshotting(false);
         return;
       }
 
       try {
-        const renderer = viewer.getRenderer();
-        const canvas = (typeof renderer.getCanvas === 'function' ? renderer.getCanvas() : container?.querySelector('canvas')) as HTMLCanvasElement;
-        
-        if (!canvas) {
-          console.error("Canvas not found");
-          setSnapshotting(false);
-          return;
-        }
-
-        const dataUrl = canvas.toDataURL('image/png', 1.0);
+        const dataUrl = core.captureScreenshot();
         
         if (!dataUrl || dataUrl.length < 500) {
           throw new Error("Captured image data is corrupted or empty");
@@ -400,22 +308,18 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   };
 
   useEffect(() => {
-    if (viewerRef.current) {
-      viewerRef.current.setHfov(fov, false);
-    }
+    coreRef.current?.setView({ hfov: fov });
   }, [fov]);
 
   useEffect(() => {
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(isShiftMode ? 0 : pitch, true);
-    }
+    coreRef.current?.setView({ pitch: isShiftMode ? 0 : pitch }, true);
   }, [isShiftMode]);
 
 
 
   const takeArchitecturalCapture = () => {
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(0, true);
+    if (coreRef.current) {
+      coreRef.current.setView({ pitch: 0 }, true);
       setTimeout(takeSnapshot, 500);
     }
   };
@@ -426,10 +330,21 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     setHorizontalOffset(0);
     setVerticalOffset(0);
     setPerspectiveCorrection(0);
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(0, true);
-      viewerRef.current.setYaw(180, true);
-      viewerRef.current.setHfov(110, true);
+    coreRef.current?.reset(true);
+  };
+
+  const handleViewChange = (view: PanoramaViewState) => {
+    const nextPitch = Math.round(view.pitch);
+    const nextYaw = Math.round(view.yaw);
+    setPitch(nextPitch);
+    setYaw(nextYaw);
+
+    const extraFov = Math.abs(view.pitch) > 60
+      ? (Math.abs(view.pitch) - 60) * 0.35
+      : 0;
+    const correctedFov = Math.min(150, fovRef.current + extraFov);
+    if (Math.abs(view.hfov - correctedFov) > 0.5) {
+      coreRef.current?.setView({ hfov: correctedFov });
     }
   };
 
@@ -657,9 +572,20 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       </AnimatePresence>
 
       {/* The main canvas viewport with CSS Parallax Transformation Layers */}
-      <div 
+      <PanoramaCore
+        ref={coreRef}
+        imageUrl={localUrl || ''}
         className="w-full h-full bg-slate-100 relative overflow-hidden flex items-center justify-center origin-center" 
-        id="pannellum-container"
+        initialPitch={0}
+        initialYaw={180}
+        initialHfov={110}
+        onLoad={() => setLoading(false)}
+        onError={(message) => {
+          console.error('Pannellum error:', message);
+          setError(message || '加载全景图时出错');
+          setLoading(false);
+        }}
+        onViewChange={handleViewChange}
         style={{
           transform: `
             translate(calc(var(--h-offset) + ${walkState.x}px), calc(var(--v-offset) + ${walkState.y + walkState.bob}px)) 
@@ -668,19 +594,19 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           `,
           transition: isWalking ? 'none' : 'transform 0.45s cubic-bezier(0.2, 0, 0.2, 1)'
         }}
-      >
-        {/* Visual Flash Snapshot Effect */}
-        <AnimatePresence>
-          {showFlash && (
-            <motion.div
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-[60] bg-white pointer-events-none"
-            />
-          )}
-        </AnimatePresence>
-      </div>
+      />
+
+      {/* Visual Flash Snapshot Effect */}
+      <AnimatePresence>
+        {showFlash && (
+          <motion.div
+            initial={{ opacity: 0.85 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[60] bg-white pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
 
 
 
