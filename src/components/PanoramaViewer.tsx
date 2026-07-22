@@ -474,7 +474,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
+          className="xiaoluo-panorama-exit flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
         >
           <X className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{closeText || '关闭'}</span>
@@ -488,7 +488,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             initial={{ opacity: 0, x: 50, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.95 }}
-            className="absolute top-4 right-4 sm:top-24 sm:right-6 z-30 w-[calc(100%-2rem)] max-w-72 max-h-[calc(100%-5rem)] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-4 sm:p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-y-auto text-slate-800 dark:text-[#e8e8ed]"
+            className="xiaoluo-panorama-pro-panel absolute z-30 bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-4 sm:p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-y-auto text-slate-800 dark:text-[#e8e8ed]"
           >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">

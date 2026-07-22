@@ -56,3 +56,24 @@
   left: 50%;
   transform: translate(-50%, -50%);
 }
+
+.xiaoluo-panorama-pro-panel {
+  top: 1rem;
+  right: 1rem;
+  width: calc(100% - 2rem);
+  max-width: 18rem;
+  max-height: calc(100% - 6rem);
+}
+
+.xiaoluo-panorama-viewer[data-theme='dark'] .xiaoluo-panorama-exit {
+  color: #14141c;
+}
+
+@media (min-width: 640px) {
+  .xiaoluo-panorama-pro-panel {
+    top: 6rem;
+    right: 1.5rem;
+    width: 18rem;
+    max-height: calc(100% - 12rem);
+  }
+}
