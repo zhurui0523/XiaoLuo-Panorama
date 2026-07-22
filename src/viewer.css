@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "./components/PanoramaViewer.tsx";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  .xiaoluo-panorama-viewer,
+  .xiaoluo-panorama-viewer *,
+  .xiaoluo-panorama-viewer::before,
+  .xiaoluo-panorama-viewer::after,
+  .xiaoluo-panorama-viewer *::before,
+  .xiaoluo-panorama-viewer *::after {
+    box-sizing: border-box;
+    border: 0 solid;
+  }
+
+  .xiaoluo-panorama-viewer {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  .xiaoluo-panorama-viewer button,
+  .xiaoluo-panorama-viewer input {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  .xiaoluo-panorama-viewer button {
+    cursor: pointer;
+  }
+
+  .xiaoluo-panorama-viewer svg,
+  .xiaoluo-panorama-viewer canvas {
+    display: block;
+  }
+}

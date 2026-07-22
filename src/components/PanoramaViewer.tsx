@@ -31,6 +31,17 @@ export interface PanoramaViewerProps {
   title?: string;
   closeText?: string;
   onSeamHealed?: (newUrl: string) => void;
+  theme?: 'light' | 'dark';
+  cornerRadius?: React.CSSProperties['borderRadius'];
+  imageLoadStrategy?: 'fetch' | 'direct';
+  onCapture?: (capture: PanoramaCaptureResult) => void | Promise<void>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+export interface PanoramaCaptureResult {
+  dataUrl: string;
+  kind: 'viewport' | 'architectural';
 }
 
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ 
@@ -38,7 +49,13 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   onClose, 
   title, 
   closeText,
-  onSeamHealed
+  onSeamHealed,
+  theme = 'light',
+  cornerRadius = 0,
+  imageLoadStrategy = 'fetch',
+  onCapture,
+  className = '',
+  style,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -198,6 +215,11 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const fetchImage = async () => {
       setLocalUrl(null);
       try {
+        if (imageLoadStrategy === 'direct') {
+          if (!cancelled) setLocalUrl(currentUrl);
+          return;
+        }
+
         if (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:')) {
           if (!cancelled) {
             setLocalUrl(currentUrl);
@@ -243,7 +265,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       cancelled = true;
       if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
     };
-  }, [currentUrl]);
+  }, [currentUrl, imageLoadStrategy]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -256,13 +278,13 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [showFlash, setShowFlash] = useState(false);
 
   // High resolution viewport snapshot capture
-  const takeSnapshot = () => {
+  const takeSnapshot = (kind: PanoramaCaptureResult['kind'] = 'viewport') => {
     if (snapshotting || loading) return;
     
     setSnapshotting(true);
     setShowFlash(true);
     
-    setTimeout(() => {
+    setTimeout(async () => {
       setShowFlash(false);
       
       const core = coreRef.current;
@@ -278,12 +300,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           throw new Error("Captured image data is corrupted or empty");
         }
 
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = `VR_view_snapshot_${Date.now()}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        if (onCapture) {
+          await onCapture({ dataUrl, kind });
+        } else {
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          link.download = `VR_view_snapshot_${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
 
         setTimeout(() => setSnapshotting(false), 800);
       } catch (err) {
@@ -320,7 +346,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const takeArchitecturalCapture = () => {
     if (coreRef.current) {
       coreRef.current.setView({ pitch: 0 }, true);
-      setTimeout(takeSnapshot, 500);
+      setTimeout(() => takeSnapshot('architectural'), 500);
     }
   };
 
@@ -353,25 +379,28 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[100] flex items-center justify-center bg-[#f3f4f6] overflow-hidden"
+      className={`xiaoluo-panorama-viewer ${theme === 'dark' ? 'dark' : ''} absolute inset-0 z-[100] flex items-center justify-center bg-[#f3f4f6] dark:bg-[#0a0a0f] overflow-hidden ${className}`}
+      data-theme={theme}
       ref={containerRef}
       style={{
         '--h-offset': `${horizontalOffset}px`,
         '--v-offset': `${verticalOffset}px`,
-        '--perspective': `${perspectiveCorrection}deg`
+        '--perspective': `${perspectiveCorrection}deg`,
+        borderRadius: cornerRadius,
+        ...style,
       } as React.CSSProperties}
     >
 
 
       {/* Floating Control Bar - Styled Exactly like Image 1 */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-between w-auto max-w-[95%] bg-white/95 backdrop-blur-xl border border-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.06)] rounded-full px-6 py-2.5 gap-4">
-        <div className="flex items-center gap-1.5 border-r border-slate-100 pr-4">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-between w-auto max-w-[95%] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.3)] rounded-full px-6 py-2.5 gap-4">
+        <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-4">
           <button
             onClick={toggleWalking}
             className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               isWalking 
                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" 
-                : "text-slate-600 hover:bg-slate-50"
+                : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="自由漫游模式: 使用 WASD 键或方向键走动"
           >
@@ -384,7 +413,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               showProTools 
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
-                : "text-slate-600 hover:bg-slate-50"
+                : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="镜头微调与高级参数"
           >
@@ -393,11 +422,11 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 pr-4 border-r border-slate-100">
+        <div className="flex items-center gap-1.5 pr-4 border-r border-slate-100 dark:border-[#2a2a3a]">
           <button
-            onClick={takeSnapshot}
+            onClick={() => takeSnapshot()}
             disabled={snapshotting || loading}
-            className={`p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 ${
+            className={`p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 ${
               snapshotting || loading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             title="捕获当前视角截图"
@@ -407,7 +436,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           
           <button
             onClick={downloadOriginal}
-            className="p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 md:block hidden"
+            className="p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title="下载原始等距柱状全景大图"
           >
             <Download className="w-4 h-4" />
@@ -415,7 +444,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           
           <button
             onClick={toggleFullscreen}
-            className="p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 md:block hidden"
+            className="p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title={isFullscreen ? "退出全屏" : "全屏模式"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -423,10 +452,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         </div>
 
         {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
-        <div className="flex items-center gap-3 bg-slate-50 px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 select-none">
+        <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#252535] px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
           <button 
             onClick={() => setFov(Math.min(150, fov + 5))}
-            className="text-slate-400 hover:text-slate-700 transition-colors"
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
             title="缩小"
           >
             <Minus className="w-3.5 h-3.5" />
@@ -436,7 +465,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           </span>
           <button 
             onClick={() => setFov(Math.max(40, fov - 5))}
-            className="text-slate-400 hover:text-slate-700 transition-colors"
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
             title="放大"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -445,7 +474,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-full transition-all active:scale-95 font-bold text-xs"
+          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
         >
           <X className="w-3.5 h-3.5" />
           <span>{closeText || '关闭'}</span>
@@ -459,16 +488,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             initial={{ opacity: 0, x: 50, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.95 }}
-            className="absolute top-24 right-6 z-30 w-72 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-3xl p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] overflow-hidden text-slate-800"
+            className="absolute top-24 right-6 z-30 w-72 bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-hidden text-slate-800 dark:text-[#e8e8ed]"
           >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-indigo-600" />
-                <h4 className="text-slate-800 font-black text-xs uppercase tracking-wider">高级相机参数</h4>
+                <h4 className="text-slate-800 dark:text-[#e8e8ed] font-black text-xs uppercase tracking-wider">高级相机参数</h4>
               </div>
               <button 
                 onClick={resetProTools}
-                className="p-1.5 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-600 transition-all"
+                className="p-1.5 hover:bg-slate-50 dark:hover:bg-[#252535] rounded-full text-slate-400 dark:text-[#8888a0] hover:text-slate-600 dark:hover:text-[#e8e8ed] transition-all"
                 title="重置全部微调"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -477,15 +506,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
             <div className="space-y-5">
               {/* Shift Lens Mode Toggle */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#1a1a26] rounded-2xl border border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-700 font-black text-xs">移轴模式 (Shift Lens)</span>
-                  <span className="text-[9px] text-slate-400">锁定水平视线，矫正建筑垂直畸变</span>
+                  <span className="text-slate-700 dark:text-[#e8e8ed] font-black text-xs">移轴模式 (Shift Lens)</span>
+                  <span className="text-[9px] text-slate-400 dark:text-[#8888a0]">锁定水平视线，矫正建筑垂直畸变</span>
                 </div>
                 <button 
                   onClick={() => setIsShiftMode(!isShiftMode)}
                   className={`w-9 h-5 rounded-full transition-all relative ${
-                    isShiftMode ? "bg-indigo-600" : "bg-slate-200"
+                    isShiftMode ? "bg-indigo-600" : "bg-slate-200 dark:bg-[#2a2a3a]"
                   }`}
                 >
                   <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
@@ -508,7 +537,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               </div>
 
               {/* Spatial Offset Sliders */}
-              <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center gap-1.5 mb-1">
                   <ChevronRight className="w-3 h-3 text-slate-400" />
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">空间位移补偿 (Offset)</label>
@@ -516,7 +545,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500">水平偏移 (X-Pivot)</label>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">水平偏移 (X-Pivot)</label>
                     <span className="text-[10px] font-mono text-slate-400">{horizontalOffset}px</span>
                   </div>
                   <input 
@@ -528,7 +557,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500">垂直偏移 (Y-Pivot)</label>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">垂直偏移 (Y-Pivot)</label>
                     <span className="text-[10px] font-mono text-slate-400">{verticalOffset}px</span>
                   </div>
                   <input 
@@ -540,7 +569,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               </div>
 
               {/* Perspective Correction */}
-              <div className="space-y-2 pt-3 border-t border-slate-100">
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">视线畸变拉伸 (Perspective)</label>
                   <span className="text-xs font-mono text-indigo-600 font-bold">{perspectiveCorrection}°</span>
@@ -555,10 +584,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-[#2a2a3a] space-y-2">
               <button 
                 onClick={takeArchitecturalCapture}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 dark:shadow-none rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 <Camera className="w-3.5 h-3.5" />
                 <span>移轴平面截图 (Arch-Capture)</span>
@@ -575,7 +604,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       <PanoramaCore
         ref={coreRef}
         imageUrl={localUrl || ''}
-        className="w-full h-full bg-slate-100 relative overflow-hidden flex items-center justify-center origin-center" 
+        className="w-full h-full bg-slate-100 dark:bg-[#0a0a0f] relative overflow-hidden flex items-center justify-center origin-center"
         initialPitch={0}
         initialYaw={180}
         initialHfov={110}
@@ -612,13 +641,13 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
       {/* Loading Overlay */}
       {loading && (
-        <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-md flex flex-col items-center justify-center z-10 gap-3">
+        <div className="absolute inset-0 bg-slate-50/80 dark:bg-[#0a0a0f]/80 backdrop-blur-md flex flex-col items-center justify-center z-10 gap-3">
           <div className="relative">
             <div className="w-14 h-14 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
             <Sliders className="w-5 h-5 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
           </div>
           <div className="text-center">
-            <p className="text-slate-800 text-sm font-black">正在载入球面全景空间...</p>
+            <p className="text-slate-800 dark:text-[#e8e8ed] text-sm font-black">正在载入球面全景空间...</p>
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Initializing Equirectangular Space</p>
           </div>
         </div>
@@ -626,13 +655,13 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
       {/* Error Overlay */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 bg-white/95 backdrop-blur-md p-6">
-          <div className="max-w-sm w-full bg-white border border-slate-100 p-8 rounded-[32px] text-center shadow-[0_16px_48px_rgba(0,0,0,0.06)]">
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-white/95 dark:bg-[#0a0a0f]/95 backdrop-blur-md p-6">
+          <div className="max-w-sm w-full bg-white dark:bg-[#14141c] border border-slate-100 dark:border-[#2a2a3a] p-8 rounded-[32px] text-center shadow-[0_16px_48px_rgba(0,0,0,0.06)]">
             <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
               <X className="w-8 h-8 text-red-500" />
             </div>
-            <h4 className="text-slate-800 text-lg font-black mb-1.5">全景初始化失败</h4>
-            <p className="text-slate-500 text-xs mb-6 leading-relaxed">
+            <h4 className="text-slate-800 dark:text-[#e8e8ed] text-lg font-black mb-1.5">全景初始化失败</h4>
+            <p className="text-slate-500 dark:text-[#8888a0] text-xs mb-6 leading-relaxed">
               由于网络资源受限或全景文件格式不合规，导致无法正常解析。请尝试切换其他场景。
             </p>
             <button
