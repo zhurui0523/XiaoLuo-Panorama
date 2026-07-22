@@ -194,6 +194,7 @@
 }
 
 .xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-zoom {
+  align-self: stretch;
   gap: 0.375rem;
   padding: 0.25rem 0.5rem;
   color: var(--xiaoluo-compact-text);
