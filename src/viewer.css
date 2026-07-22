@@ -131,7 +131,7 @@
   padding: 0.375rem 0.5rem;
   background-color: var(--xiaoluo-compact-surface);
   border: 1px solid var(--xiaoluo-compact-border);
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   box-shadow: var(--xiaoluo-compact-shadow);
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
@@ -199,7 +199,7 @@
   color: var(--xiaoluo-compact-text);
   background-color: var(--xiaoluo-compact-surface);
   border: 1px solid var(--xiaoluo-compact-border);
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   box-shadow: var(--xiaoluo-compact-shadow);
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
