@@ -19,18 +19,13 @@ import {
   Eye,
   Check,
   Plus,
-  Minus
+  Minus,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import 'pannellum/src/css/pannellum.css';
-import 'pannellum';
-
-// Declare pannellum on window for TypeScript
-declare global {
-  interface Window {
-    pannellum: any;
-  }
-}
+import { PanoramaCore } from './PanoramaCore';
+import type { PanoramaCoreHandle, PanoramaViewState } from './PanoramaCore';
 
 export interface PanoramaViewerProps {
   imageUrl: string;
@@ -38,14 +33,120 @@ export interface PanoramaViewerProps {
   title?: string;
   closeText?: string;
   onSeamHealed?: (newUrl: string) => void;
+  theme?: 'light' | 'dark';
+  cornerRadius?: React.CSSProperties['borderRadius'];
+  imageLoadStrategy?: 'fetch' | 'direct';
+  captureMode?: 'instant' | 'ratio';
+  onCapture?: (capture: PanoramaCaptureResult) => void | Promise<void>;
+  className?: string;
+  style?: React.CSSProperties;
 }
+
+export interface PanoramaCaptureResult {
+  dataUrl: string;
+  kind: 'viewport' | 'architectural';
+  aspectRatio?: PanoramaCaptureRatio;
+}
+
+export type PanoramaCaptureRatio =
+  | 'auto'
+  | '1:1'
+  | '9:16'
+  | '16:9'
+  | '3:4'
+  | '4:3'
+  | '3:2'
+  | '2:3'
+  | '5:4'
+  | '4:5'
+  | '21:9'
+  | '1:4'
+  | '4:1';
+
+interface CaptureRatioOption {
+  id: PanoramaCaptureRatio;
+  label: string;
+  value: number | null;
+}
+
+const CAPTURE_RATIO_OPTIONS: CaptureRatioOption[] = [
+  { id: 'auto', label: '自适应', value: null },
+  { id: '1:1', label: '1:1', value: 1 },
+  { id: '9:16', label: '9:16', value: 9 / 16 },
+  { id: '16:9', label: '16:9', value: 16 / 9 },
+  { id: '3:4', label: '3:4', value: 3 / 4 },
+  { id: '4:3', label: '4:3', value: 4 / 3 },
+  { id: '3:2', label: '3:2', value: 3 / 2 },
+  { id: '2:3', label: '2:3', value: 2 / 3 },
+  { id: '5:4', label: '5:4', value: 5 / 4 },
+  { id: '4:5', label: '4:5', value: 4 / 5 },
+  { id: '21:9', label: '21:9', value: 21 / 9 },
+  { id: '1:4', label: '1:4', value: 1 / 4 },
+  { id: '4:1', label: '4:1', value: 4 },
+];
+
+const cropCaptureToRatio = async (
+  dataUrl: string,
+  ratio: CaptureRatioOption,
+): Promise<string> => {
+  if (ratio.value === null) return dataUrl;
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const nextImage = new Image();
+    nextImage.onload = () => resolve(nextImage);
+    nextImage.onerror = () => reject(new Error('Captured image could not be decoded'));
+    nextImage.src = dataUrl;
+  });
+
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const sourceRatio = sourceWidth / sourceHeight;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+
+  if (sourceRatio > ratio.value) {
+    cropWidth = sourceHeight * ratio.value;
+  } else {
+    cropHeight = sourceWidth / ratio.value;
+  }
+
+  const sourceX = (sourceWidth - cropWidth) / 2;
+  const sourceY = (sourceHeight - cropHeight) / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(cropWidth));
+  canvas.height = Math.max(1, Math.round(cropHeight));
+  const context = canvas.getContext('2d');
+
+  if (!context) throw new Error('Canvas 2D context is unavailable');
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+
+  return canvas.toDataURL('image/png');
+};
 
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ 
   imageUrl, 
   onClose, 
   title, 
   closeText,
-  onSeamHealed
+  onSeamHealed,
+  theme = 'light',
+  cornerRadius = 0,
+  imageLoadStrategy = 'fetch',
+  captureMode = 'instant',
+  onCapture,
+  className = '',
+  style,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -53,6 +154,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [snapshotting, setSnapshotting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProTools, setShowProTools] = useState(false);
+  const [showCaptureTools, setShowCaptureTools] = useState(false);
+  const [captureRatio, setCaptureRatio] = useState<PanoramaCaptureRatio>('16:9');
   
   const fovRef = useRef(110);
   const [fov, setFovState] = useState(110);
@@ -84,17 +187,22 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const animationRef = useRef<number | null>(null);
   const momentumRef = useRef({ x: 0, z: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<any>(null);
+  const coreRef = useRef<PanoramaCoreHandle>(null);
 
   useEffect(() => {
     setCurrentUrl(imageUrl);
   }, [imageUrl]);
 
-  // Capture keyboard events for WASD walking
+  // Capture WASD only while walk mode is enabled and this viewer owns focus.
   useEffect(() => {
+    if (!isWalking) return;
+    const container = containerRef.current;
+    if (!container) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
+        e.preventDefault();
         setKeysPressed(prev => ({ ...prev, [k]: true }));
       }
     };
@@ -103,13 +211,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       setKeysPressed(prev => ({ ...prev, [k]: false }));
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('keyup', handleKeyUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('keyup', handleKeyUp);
+      setKeysPressed({});
     };
-  }, []);
+  }, [isWalking]);
 
   // WASD Walk Simulation Engine (creates actual parallax perspective shift inside WebGL view)
   useEffect(() => {
@@ -148,18 +257,17 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         bob: bobAmount
       }));
 
-      // Sync with Pannellum Viewer for actual yaw/pitch panning feel during walking
-      if (viewerRef.current && (isMoving || speed > 0.01)) {
-        const currentFov = viewerRef.current.getHfov();
-        const currentYaw = viewerRef.current.getYaw();
+      // Sync with the embedded core for yaw / FOV movement.
+      const view = coreRef.current?.getView();
+      if (view && (isMoving || speed > 0.01)) {
         
         // Forward walk decreases/increases FOV slightly to convey depth motion
         const fovTarget = momentumRef.current.z * -0.4;
-        viewerRef.current.setHfov(Math.max(50, Math.min(125, currentFov + fovTarget)), false);
+        const nextFov = Math.max(50, Math.min(125, view.hfov + fovTarget));
         
         // Sidestepping turns the camera view yaw slightly
         const yawShift = momentumRef.current.x * 0.15;
-        viewerRef.current.setYaw(currentYaw + yawShift, false);
+        coreRef.current?.setView({ hfov: nextFov, yaw: view.yaw + yawShift });
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -172,7 +280,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   }, [isWalking, keysPressed]);
 
   const toggleWalking = () => {
-    setIsWalking(!isWalking);
+    setIsWalking((enabled) => !enabled);
+    requestAnimationFrame(() => coreRef.current?.focus());
   };
 
   const toggleFullscreen = () => {
@@ -193,11 +302,22 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     setLoading(true);
     setError(null);
 
+    let activeObjectUrl: string | null = null;
+    let cancelled = false;
+
     const fetchImage = async () => {
+      setLocalUrl(null);
       try {
+        if (imageLoadStrategy === 'direct') {
+          if (!cancelled) setLocalUrl(currentUrl);
+          return;
+        }
+
         if (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:')) {
-          setLocalUrl(currentUrl);
-          setLoading(false);
+          if (!cancelled) {
+            setLocalUrl(currentUrl);
+            setLoading(false);
+          }
           return;
         }
 
@@ -215,116 +335,30 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         
         if (!blob || blob.size === 0) throw new Error("Received empty blob");
 
-        const url = URL.createObjectURL(blob);
-        setLocalUrl(url);
+        activeObjectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(activeObjectUrl);
+          activeObjectUrl = null;
+          return;
+        }
+        setLocalUrl(activeObjectUrl);
         setLoading(false);
       } catch (err) {
         console.error("Failed to fetch panorama image:", err);
-        setLocalUrl(currentUrl); // Try direct fallback
-        setLoading(false);
-      }
-    };
-
-    fetchImage();
-
-    return () => {
-      if (localUrl && localUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(localUrl);
-      }
-    };
-  }, [currentUrl]);
-
-  // Hack HTML Canvas to always preserve drawing buffer for Pannellum high quality screen capturing
-  useEffect(() => {
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    (HTMLCanvasElement.prototype.getContext as any) = function(type: string, attributes: any) {
-      if (type.includes('webgl')) {
-        attributes = attributes || {};
-        attributes.preserveDrawingBuffer = true;
-        attributes.alpha = false;
-      }
-      return originalGetContext.call(this, type, attributes);
-    };
-    
-    return () => {
-      HTMLCanvasElement.prototype.getContext = originalGetContext;
-    };
-  }, []);
-
-  // Initialize Pannellum
-  useEffect(() => {
-    if (localUrl && containerRef.current && window.pannellum) {
-      try {
-        if (viewerRef.current) {
-          viewerRef.current.destroy();
-        }
-
-        viewerRef.current = window.pannellum.viewer('pannellum-container', {
-          type: 'equirectangular',
-          panorama: localUrl,
-          pitch: pitch,
-          yaw: yaw,
-          hfov: fov,
-          autoLoad: true,
-          showZoomCtrl: false,
-          showFullscreenCtrl: false,
-          backgroundColor: [243, 244, 246], // Soft light gray background matching image 1
-          compass: false,
-          keyboardZoom: true,
-          mouseZoom: true,
-          draggable: true,
-          minHfov: 40,
-          maxHfov: 150,
-          hfovBounds: [40, 150],
-          friction: 0.15,
-          vOffset: 0,
-          multiRes: false,
-          crossOrigin: 'anonymous'
-        });
-
-        // Anti-pole pinching zoom scaling
-        viewerRef.current.on('viewchange', () => {
-          const p = viewerRef.current.getPitch();
-          const y = viewerRef.current.getYaw();
-          setPitch(Math.round(p));
-          setYaw(Math.round(y));
-
-          const absPitch = Math.abs(p);
-          if (absPitch > 60) {
-            const extraFov = (absPitch - 60) * 0.35;
-            viewerRef.current.setHfov(fovRef.current + extraFov, false);
-          } else {
-            viewerRef.current.setHfov(fovRef.current, false);
-          }
-        });
-
-        viewerRef.current.on('zoomchange', (newFov: number) => {
-          const rounded = Math.round(newFov);
-          if (rounded !== fovRef.current) {
-            setFov(rounded);
-          }
-        });
-
-        viewerRef.current.on('load', () => setLoading(false));
-        viewerRef.current.on('error', (err: any) => {
-          console.error("Pannellum error:", err);
-          setError(typeof err === 'string' ? err : '加载全景图时出错');
+        if (!cancelled) {
+          setLocalUrl(currentUrl); // Try direct fallback
           setLoading(false);
-        });
-      } catch (e) {
-        console.error("Failed to initialize Pannellum:", e);
-        setError("无法初始化全景查看器");
-        setLoading(false);
-      }
-    }
-
-    return () => {
-      if (viewerRef.current) {
-        viewerRef.current.destroy();
-        viewerRef.current = null;
+        }
       }
     };
-  }, [localUrl]);
+
+    void fetchImage();
+
+    return () => {
+      cancelled = true;
+      if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
+    };
+  }, [currentUrl, imageLoadStrategy]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -337,46 +371,57 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [showFlash, setShowFlash] = useState(false);
 
   // High resolution viewport snapshot capture
-  const takeSnapshot = () => {
+  const takeSnapshot = (
+    kind: PanoramaCaptureResult['kind'] = 'viewport',
+    requestedRatio: PanoramaCaptureRatio = 'auto',
+  ) => {
     if (snapshotting || loading) return;
     
     setSnapshotting(true);
     setShowFlash(true);
     
-    setTimeout(() => {
+    setTimeout(async () => {
       setShowFlash(false);
       
-      const container = document.getElementById('pannellum-container');
-      const viewer = viewerRef.current;
-      
-      if (!viewer) {
+      const core = coreRef.current;
+      if (!core) {
         setSnapshotting(false);
         return;
       }
 
       try {
-        const renderer = viewer.getRenderer();
-        const canvas = (typeof renderer.getCanvas === 'function' ? renderer.getCanvas() : container?.querySelector('canvas')) as HTMLCanvasElement;
+        const sourceDataUrl = core.captureScreenshot();
         
-        if (!canvas) {
-          console.error("Canvas not found");
-          setSnapshotting(false);
-          return;
-        }
-
-        const dataUrl = canvas.toDataURL('image/png', 1.0);
-        
-        if (!dataUrl || dataUrl.length < 500) {
+        if (!sourceDataUrl || sourceDataUrl.length < 500) {
           throw new Error("Captured image data is corrupted or empty");
         }
 
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = `VR_view_snapshot_${Date.now()}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const ratioOption = CAPTURE_RATIO_OPTIONS.find(
+          (option) => option.id === requestedRatio,
+        ) ?? CAPTURE_RATIO_OPTIONS[0];
+        const dataUrl = kind === 'viewport'
+          ? await cropCaptureToRatio(sourceDataUrl, ratioOption)
+          : sourceDataUrl;
 
+        if (onCapture) {
+          await onCapture({
+            dataUrl,
+            kind,
+            aspectRatio: kind === 'viewport' ? ratioOption.id : undefined,
+          });
+        } else {
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          const ratioSuffix = kind === 'viewport' && ratioOption.id !== 'auto'
+            ? `_${ratioOption.id.replace(':', 'x')}`
+            : '';
+          link.download = `VR_view_snapshot${ratioSuffix}_${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        if (kind === 'viewport') setShowCaptureTools(false);
         setTimeout(() => setSnapshotting(false), 800);
       } catch (err) {
         console.error("Capture error:", err);
@@ -400,24 +445,34 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   };
 
   useEffect(() => {
-    if (viewerRef.current) {
-      viewerRef.current.setHfov(fov, false);
-    }
+    coreRef.current?.setView({ hfov: fov });
   }, [fov]);
 
   useEffect(() => {
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(isShiftMode ? 0 : pitch, true);
-    }
+    coreRef.current?.setView({ pitch: isShiftMode ? 0 : pitch }, true);
   }, [isShiftMode]);
 
 
 
   const takeArchitecturalCapture = () => {
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(0, true);
-      setTimeout(takeSnapshot, 500);
+    if (coreRef.current) {
+      coreRef.current.setView({ pitch: 0 }, true);
+      setTimeout(() => takeSnapshot('architectural'), 500);
     }
+  };
+
+  const selectedCaptureRatio = CAPTURE_RATIO_OPTIONS.find(
+    (option) => option.id === captureRatio,
+  ) ?? CAPTURE_RATIO_OPTIONS[0];
+
+  const toggleCaptureTools = () => {
+    if (captureMode === 'instant') {
+      takeSnapshot();
+      return;
+    }
+
+    setShowProTools(false);
+    setShowCaptureTools((visible) => !visible);
   };
 
   const resetProTools = () => {
@@ -426,10 +481,21 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     setHorizontalOffset(0);
     setVerticalOffset(0);
     setPerspectiveCorrection(0);
-    if (viewerRef.current) {
-      viewerRef.current.setPitch(0, true);
-      viewerRef.current.setYaw(180, true);
-      viewerRef.current.setHfov(110, true);
+    coreRef.current?.reset(true);
+  };
+
+  const handleViewChange = (view: PanoramaViewState) => {
+    const nextPitch = Math.round(view.pitch);
+    const nextYaw = Math.round(view.yaw);
+    setPitch(nextPitch);
+    setYaw(nextYaw);
+
+    const extraFov = Math.abs(view.pitch) > 60
+      ? (Math.abs(view.pitch) - 60) * 0.35
+      : 0;
+    const correctedFov = Math.min(150, fovRef.current + extraFov);
+    if (Math.abs(view.hfov - correctedFov) > 0.5) {
+      coreRef.current?.setView({ hfov: correctedFov });
     }
   };
 
@@ -438,61 +504,79 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[100] flex items-center justify-center bg-[#f3f4f6] overflow-hidden"
+      className={`xiaoluo-panorama-viewer ${theme === 'dark' ? 'dark' : ''} absolute inset-0 z-[100] flex items-center justify-center bg-[#f3f4f6] dark:bg-[#0a0a0f] overflow-hidden ${className}`}
+      data-theme={theme}
       ref={containerRef}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape' && showCaptureTools) {
+          event.stopPropagation();
+          setShowCaptureTools(false);
+        }
+      }}
       style={{
         '--h-offset': `${horizontalOffset}px`,
         '--v-offset': `${verticalOffset}px`,
-        '--perspective': `${perspectiveCorrection}deg`
+        '--perspective': `${perspectiveCorrection}deg`,
+        borderRadius: cornerRadius,
+        ...style,
       } as React.CSSProperties}
     >
 
 
       {/* Floating Control Bar - Styled Exactly like Image 1 */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-between w-auto max-w-[95%] bg-white/95 backdrop-blur-xl border border-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.06)] rounded-full px-6 py-2.5 gap-4">
-        <div className="flex items-center gap-1.5 border-r border-slate-100 pr-4">
+      <div className="xiaoluo-panorama-toolbar absolute bottom-3 sm:bottom-6 z-20 flex items-center justify-between w-auto max-w-[calc(100%-1rem)] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.3)] rounded-full px-3 sm:px-6 py-2.5 gap-1.5 sm:gap-4 whitespace-nowrap">
+        <div className="xiaoluo-panorama-toolbar-actions">
+        <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-2 sm:pr-4">
           <button
             onClick={toggleWalking}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
-              isWalking 
-                ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" 
-                : "text-slate-600 hover:bg-slate-50"
+            className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+              isWalking
+                ? "bg-emerald-500 text-white"
+                : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="自由漫游模式: 使用 WASD 键或方向键走动"
+            aria-pressed={isWalking}
           >
             <Footprints className="w-4 h-4" />
-            <span>{isWalking ? '正在漫游' : 'WASD 漫游'}</span>
+            <span className="hidden sm:inline">{isWalking ? '正在漫游' : 'WASD 漫游'}</span>
           </button>
 
           <button
-            onClick={() => setShowProTools(!showProTools)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
-              showProTools 
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
-                : "text-slate-600 hover:bg-slate-50"
+            onClick={() => {
+              setShowCaptureTools(false);
+              setShowProTools(!showProTools);
+            }}
+            className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+              showProTools
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
             }`}
             title="镜头微调与高级参数"
+            aria-pressed={showProTools}
           >
             <Sliders className="w-4 h-4" />
-            <span>视觉矫正</span>
+            <span className="hidden sm:inline">视觉矫正</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 pr-4 border-r border-slate-100">
+        <div className="flex items-center gap-1.5 pr-2 sm:pr-4 border-r border-slate-100 dark:border-[#2a2a3a]">
           <button
-            onClick={takeSnapshot}
+            onClick={toggleCaptureTools}
             disabled={snapshotting || loading}
-            className={`p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 ${
+            className={`xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 ${
+              showCaptureTools ? 'bg-indigo-600 text-white dark:text-white' : ''
+            } ${
               snapshotting || loading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
-            title="捕获当前视角截图"
+            aria-pressed={captureMode === 'ratio' ? showCaptureTools : undefined}
+            title={captureMode === 'ratio' ? '按比例截取当前视角' : '捕获当前视角截图'}
           >
             {snapshotting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
           </button>
           
           <button
             onClick={downloadOriginal}
-            className="p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 md:block hidden"
+            className="xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title="下载原始等距柱状全景大图"
           >
             <Download className="w-4 h-4" />
@@ -500,42 +584,138 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           
           <button
             onClick={toggleFullscreen}
-            className="p-2.5 hover:bg-slate-50 text-slate-600 rounded-full transition-all active:scale-95 md:block hidden"
+            className="xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title={isFullscreen ? "退出全屏" : "全屏模式"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
 
-        {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
-        <div className="flex items-center gap-3 bg-slate-50 px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 select-none">
-          <button 
-            onClick={() => setFov(Math.min(150, fov + 5))}
-            className="text-slate-400 hover:text-slate-700 transition-colors"
-            title="缩小"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono min-w-[34px] text-center">
-            {Math.round((110 / fov) * 100)}%
-          </span>
-          <button 
-            onClick={() => setFov(Math.max(40, fov - 5))}
-            className="text-slate-400 hover:text-slate-700 transition-colors"
-            title="放大"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-full transition-all active:scale-95 font-bold text-xs"
+          className="xiaoluo-panorama-exit flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
         >
           <X className="w-3.5 h-3.5" />
-          <span>{closeText || '关闭'}</span>
+          <span className="hidden sm:inline">{closeText || '关闭'}</span>
         </button>
+        </div>
+
+        {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
+        <div className="xiaoluo-panorama-zoom flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
+          <button
+            onClick={() => setFov(Math.min(150, fov + 5))}
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
+            title="缩小"
+          >
+            <Minus className="xiaoluo-panorama-zoom-icon-default w-3.5 h-3.5" />
+            <ZoomOut className="xiaoluo-panorama-zoom-icon-compact w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            className="xiaoluo-panorama-zoom-value font-mono min-w-[34px] text-center"
+            onClick={() => setFov(110)}
+            title="重置缩放"
+            aria-label="重置缩放"
+          >
+            {Math.round((110 / fov) * 100)}%
+          </button>
+          <button
+            onClick={() => setFov(Math.max(40, fov - 5))}
+            className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
+            title="放大"
+          >
+            <Plus className="xiaoluo-panorama-zoom-icon-default w-3.5 h-3.5" />
+            <ZoomIn className="xiaoluo-panorama-zoom-icon-compact w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {captureMode === 'ratio' && showCaptureTools && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="xiaoluo-panorama-capture-guide"
+              aria-hidden="true"
+            >
+              <div
+                className={`xiaoluo-panorama-capture-frame ${
+                  selectedCaptureRatio.value === null
+                    ? 'is-auto'
+                    : selectedCaptureRatio.value >= 1
+                      ? 'is-landscape'
+                      : 'is-portrait'
+                }`}
+                style={{
+                  aspectRatio: selectedCaptureRatio.value ?? undefined,
+                  '--xiaoluo-capture-ratio': selectedCaptureRatio.value ?? 1,
+                } as React.CSSProperties}
+              >
+                <span>{selectedCaptureRatio.label}</span>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              className="xiaoluo-panorama-capture-panel"
+              role="dialog"
+              aria-label="截图比例"
+            >
+              <div className="xiaoluo-panorama-capture-header">
+                <span>截图比例</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCaptureTools(false)}
+                  title="关闭比例截图"
+                  aria-label="关闭比例截图"
+                >
+                  <X />
+                </button>
+              </div>
+
+              <div className="xiaoluo-panorama-ratio-grid">
+                {CAPTURE_RATIO_OPTIONS.map((option) => {
+                  const selected = option.id === captureRatio;
+                  return (
+                    <button
+                      type="button"
+                      key={option.id}
+                      className="xiaoluo-panorama-ratio-option"
+                      data-selected={selected}
+                      aria-pressed={selected}
+                      onClick={() => setCaptureRatio(option.id)}
+                    >
+                      <span
+                        className={`xiaoluo-panorama-ratio-mark ${option.value === null ? 'is-auto' : ''}`}
+                        style={{ aspectRatio: option.value ?? undefined }}
+                      />
+                      <span>{option.label}</span>
+                      {selected && <Check className="xiaoluo-panorama-ratio-check" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="xiaoluo-panorama-capture-footer">
+                <span>{selectedCaptureRatio.label}</span>
+                <button
+                  type="button"
+                  className="xiaoluo-panorama-capture-confirm"
+                  disabled={snapshotting || loading}
+                  onClick={() => takeSnapshot('viewport', captureRatio)}
+                >
+                  {snapshotting ? <Loader2 className="animate-spin" /> : <Camera />}
+                  <span>截图</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Advanced Pro Camera Tools Panel */}
       <AnimatePresence>
@@ -544,16 +724,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             initial={{ opacity: 0, x: 50, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.95 }}
-            className="absolute top-24 right-6 z-30 w-72 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-3xl p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] overflow-hidden text-slate-800"
+            className="xiaoluo-panorama-pro-panel absolute z-30 bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-4 sm:p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-y-auto text-slate-800 dark:text-[#e8e8ed]"
           >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-indigo-600" />
-                <h4 className="text-slate-800 font-black text-xs uppercase tracking-wider">高级相机参数</h4>
+                <h4 className="xiaoluo-panorama-pro-title text-slate-800 dark:text-[#e8e8ed] font-black text-xs uppercase tracking-wider">高级相机参数</h4>
               </div>
               <button 
                 onClick={resetProTools}
-                className="p-1.5 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-600 transition-all"
+                className="xiaoluo-panorama-pro-reset p-1.5 hover:bg-slate-50 dark:hover:bg-[#252535] rounded-full text-slate-400 dark:text-[#8888a0] hover:text-slate-600 dark:hover:text-[#e8e8ed] transition-all"
                 title="重置全部微调"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -562,18 +742,19 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
             <div className="space-y-5">
               {/* Shift Lens Mode Toggle */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="xiaoluo-panorama-shift-card flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#1a1a26] rounded-2xl border border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-700 font-black text-xs">移轴模式 (Shift Lens)</span>
-                  <span className="text-[9px] text-slate-400">锁定水平视线，矫正建筑垂直畸变</span>
+                  <span className="xiaoluo-panorama-shift-title text-slate-700 dark:text-[#e8e8ed] font-black text-xs">移轴模式 (Shift Lens)</span>
+                  <span className="xiaoluo-panorama-shift-description text-[9px] text-slate-400 dark:text-[#8888a0]">锁定水平视线，矫正建筑垂直畸变</span>
                 </div>
                 <button 
                   onClick={() => setIsShiftMode(!isShiftMode)}
-                  className={`w-9 h-5 rounded-full transition-all relative ${
-                    isShiftMode ? "bg-indigo-600" : "bg-slate-200"
+                  data-checked={isShiftMode}
+                  className={`xiaoluo-panorama-shift-toggle w-9 h-5 rounded-full transition-all relative ${
+                    isShiftMode ? "bg-indigo-600" : "bg-slate-200 dark:bg-[#2a2a3a]"
                   }`}
                 >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
+                  <div className={`xiaoluo-panorama-shift-knob absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
                     isShiftMode ? "left-4.5" : "left-0.5"
                   }`} />
                 </button>
@@ -582,73 +763,73 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               {/* FOV Slider */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">镜头焦距 (FOV)</label>
-                  <span className="text-xs font-mono text-indigo-600 font-bold">{fov}°</span>
+                  <label className="xiaoluo-panorama-pro-label text-[10px] font-black text-slate-400 uppercase tracking-wider">镜头焦距 (FOV)</label>
+                  <span className="xiaoluo-panorama-pro-value text-xs font-mono text-indigo-600 font-bold">{fov}°</span>
                 </div>
                 <input 
                   type="range" min="40" max="140" step="1" 
                   value={fov} onChange={(e) => setFov(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                  className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
                 />
               </div>
 
               {/* Spatial Offset Sliders */}
-              <div className="space-y-4 pt-3 border-t border-slate-100">
+              <div className="xiaoluo-panorama-pro-section space-y-4 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">空间位移补偿 (Offset)</label>
+                  <ChevronRight className="xiaoluo-panorama-pro-section-icon w-3 h-3 text-slate-400" />
+                  <label className="xiaoluo-panorama-pro-section-label text-[10px] font-black text-slate-400 uppercase tracking-wider">空间位移补偿 (Offset)</label>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500">水平偏移 (X-Pivot)</label>
-                    <span className="text-[10px] font-mono text-slate-400">{horizontalOffset}px</span>
+                    <label className="xiaoluo-panorama-pro-label text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">水平偏移 (X-Pivot)</label>
+                    <span className="xiaoluo-panorama-pro-muted-value text-[10px] font-mono text-slate-400">{horizontalOffset}px</span>
                   </div>
                   <input 
                     type="range" min="-80" max="80" step="1" 
                     value={horizontalOffset} onChange={(e) => setHorizontalOffset(Number(e.target.value))}
-                    className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
+                    className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500">垂直偏移 (Y-Pivot)</label>
-                    <span className="text-[10px] font-mono text-slate-400">{verticalOffset}px</span>
+                    <label className="xiaoluo-panorama-pro-label text-[10px] font-bold text-slate-500 dark:text-[#aaaabc]">垂直偏移 (Y-Pivot)</label>
+                    <span className="xiaoluo-panorama-pro-muted-value text-[10px] font-mono text-slate-400">{verticalOffset}px</span>
                   </div>
                   <input 
                     type="range" min="-40" max="40" step="1" 
                     value={verticalOffset} onChange={(e) => setVerticalOffset(Number(e.target.value))}
-                    className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
+                    className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-slate-600"
                   />
                 </div>
               </div>
 
               {/* Perspective Correction */}
-              <div className="space-y-2 pt-3 border-t border-slate-100">
+              <div className="xiaoluo-panorama-pro-section space-y-2 pt-3 border-t border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">视线畸变拉伸 (Perspective)</label>
-                  <span className="text-xs font-mono text-indigo-600 font-bold">{perspectiveCorrection}°</span>
+                  <label className="xiaoluo-panorama-pro-section-label text-[10px] font-black text-slate-400 uppercase tracking-wider">视线畸变拉伸 (Perspective)</label>
+                  <span className="xiaoluo-panorama-pro-value text-xs font-mono text-indigo-600 font-bold">{perspectiveCorrection}°</span>
                 </div>
                 <input 
                   type="range" min="-12" max="12" step="0.5" 
                   value={perspectiveCorrection} onChange={(e) => setPerspectiveCorrection(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                  className="xiaoluo-panorama-pro-range w-full h-1 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
                 />
               </div>
 
 
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
+            <div className="xiaoluo-panorama-pro-footer mt-5 pt-4 border-t border-slate-100 dark:border-[#2a2a3a] space-y-2">
               <button 
                 onClick={takeArchitecturalCapture}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="xiaoluo-panorama-arch-capture w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 dark:shadow-none rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 <Camera className="w-3.5 h-3.5" />
                 <span>移轴平面截图 (Arch-Capture)</span>
               </button>
-              <p className="text-[8px] text-slate-400 text-center leading-normal">
+              <p className="xiaoluo-panorama-pro-hint text-[8px] text-slate-400 text-center leading-normal">
                 自动对齐地平线，输出透视正确的 2D 空间构图图片
               </p>
             </div>
@@ -657,9 +838,20 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       </AnimatePresence>
 
       {/* The main canvas viewport with CSS Parallax Transformation Layers */}
-      <div 
-        className="w-full h-full bg-slate-100 relative overflow-hidden flex items-center justify-center origin-center" 
-        id="pannellum-container"
+      <PanoramaCore
+        ref={coreRef}
+        imageUrl={localUrl || ''}
+        className="w-full h-full bg-slate-100 dark:bg-[#0a0a0f] relative overflow-hidden flex items-center justify-center origin-center"
+        initialPitch={0}
+        initialYaw={180}
+        initialHfov={110}
+        onLoad={() => setLoading(false)}
+        onError={(message) => {
+          console.error('Pannellum error:', message);
+          setError(message || '加载全景图时出错');
+          setLoading(false);
+        }}
+        onViewChange={handleViewChange}
         style={{
           transform: `
             translate(calc(var(--h-offset) + ${walkState.x}px), calc(var(--v-offset) + ${walkState.y + walkState.bob}px)) 
@@ -668,31 +860,31 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           `,
           transition: isWalking ? 'none' : 'transform 0.45s cubic-bezier(0.2, 0, 0.2, 1)'
         }}
-      >
-        {/* Visual Flash Snapshot Effect */}
-        <AnimatePresence>
-          {showFlash && (
-            <motion.div
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-[60] bg-white pointer-events-none"
-            />
-          )}
-        </AnimatePresence>
-      </div>
+      />
+
+      {/* Visual Flash Snapshot Effect */}
+      <AnimatePresence>
+        {showFlash && (
+          <motion.div
+            initial={{ opacity: 0.85 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[60] bg-white pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
 
 
 
       {/* Loading Overlay */}
       {loading && (
-        <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-md flex flex-col items-center justify-center z-10 gap-3">
+        <div className="absolute inset-0 bg-slate-50/80 dark:bg-[#0a0a0f]/80 backdrop-blur-md flex flex-col items-center justify-center z-10 gap-3">
           <div className="relative">
             <div className="w-14 h-14 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-            <Sliders className="w-5 h-5 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+            <Sliders className="xiaoluo-panorama-loading-icon w-5 h-5 text-indigo-600 absolute animate-pulse" />
           </div>
           <div className="text-center">
-            <p className="text-slate-800 text-sm font-black">正在载入球面全景空间...</p>
+            <p className="text-slate-800 dark:text-[#e8e8ed] text-sm font-black">正在载入球面全景空间...</p>
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Initializing Equirectangular Space</p>
           </div>
         </div>
@@ -700,13 +892,13 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
       {/* Error Overlay */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 bg-white/95 backdrop-blur-md p-6">
-          <div className="max-w-sm w-full bg-white border border-slate-100 p-8 rounded-[32px] text-center shadow-[0_16px_48px_rgba(0,0,0,0.06)]">
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-white/95 dark:bg-[#0a0a0f]/95 backdrop-blur-md p-6">
+          <div className="max-w-sm w-full bg-white dark:bg-[#14141c] border border-slate-100 dark:border-[#2a2a3a] p-8 rounded-[32px] text-center shadow-[0_16px_48px_rgba(0,0,0,0.06)]">
             <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
               <X className="w-8 h-8 text-red-500" />
             </div>
-            <h4 className="text-slate-800 text-lg font-black mb-1.5">全景初始化失败</h4>
-            <p className="text-slate-500 text-xs mb-6 leading-relaxed">
+            <h4 className="text-slate-800 dark:text-[#e8e8ed] text-lg font-black mb-1.5">全景初始化失败</h4>
+            <p className="text-slate-500 dark:text-[#8888a0] text-xs mb-6 leading-relaxed">
               由于网络资源受限或全景文件格式不合规，导致无法正常解析。请尝试切换其他场景。
             </p>
             <button
