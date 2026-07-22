@@ -45,3 +45,14 @@
     display: block;
   }
 }
+
+.xiaoluo-panorama-toolbar {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.xiaoluo-panorama-loading-icon {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}

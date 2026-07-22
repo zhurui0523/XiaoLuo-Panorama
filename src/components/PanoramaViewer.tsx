@@ -393,11 +393,11 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
 
       {/* Floating Control Bar - Styled Exactly like Image 1 */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-between w-auto max-w-[95%] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.3)] rounded-full px-6 py-2.5 gap-4">
-        <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-4">
+      <div className="xiaoluo-panorama-toolbar absolute bottom-3 sm:bottom-6 z-20 flex items-center justify-between w-auto max-w-[calc(100%-1rem)] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.3)] rounded-full px-3 sm:px-6 py-2.5 gap-1.5 sm:gap-4 whitespace-nowrap">
+        <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-2 sm:pr-4">
           <button
             onClick={toggleWalking}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               isWalking 
                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" 
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
@@ -405,12 +405,12 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             title="自由漫游模式: 使用 WASD 键或方向键走动"
           >
             <Footprints className="w-4 h-4" />
-            <span>{isWalking ? '正在漫游' : 'WASD 漫游'}</span>
+            <span className="hidden sm:inline">{isWalking ? '正在漫游' : 'WASD 漫游'}</span>
           </button>
 
           <button
             onClick={() => setShowProTools(!showProTools)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               showProTools 
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
@@ -418,11 +418,11 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             title="镜头微调与高级参数"
           >
             <Sliders className="w-4 h-4" />
-            <span>视觉矫正</span>
+            <span className="hidden sm:inline">视觉矫正</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 pr-4 border-r border-slate-100 dark:border-[#2a2a3a]">
+        <div className="flex items-center gap-1.5 pr-2 sm:pr-4 border-r border-slate-100 dark:border-[#2a2a3a]">
           <button
             onClick={() => takeSnapshot()}
             disabled={snapshotting || loading}
@@ -452,7 +452,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         </div>
 
         {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
-        <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#252535] px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
+        <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
           <button 
             onClick={() => setFov(Math.min(150, fov + 5))}
             className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
@@ -474,10 +474,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
+          className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-slate-900 dark:bg-[#e8e8ed] hover:bg-slate-800 dark:hover:bg-white text-white dark:text-[#14141c] rounded-full transition-all active:scale-95 font-bold text-xs"
         >
           <X className="w-3.5 h-3.5" />
-          <span>{closeText || '关闭'}</span>
+          <span className="hidden sm:inline">{closeText || '关闭'}</span>
         </button>
       </div>
 
@@ -488,7 +488,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             initial={{ opacity: 0, x: 50, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.95 }}
-            className="absolute top-24 right-6 z-30 w-72 bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-hidden text-slate-800 dark:text-[#e8e8ed]"
+            className="absolute top-4 right-4 sm:top-24 sm:right-6 z-30 w-[calc(100%-2rem)] max-w-72 max-h-[calc(100%-5rem)] bg-white/95 dark:bg-[#14141c]/95 backdrop-blur-xl border border-slate-100 dark:border-[#2a2a3a] rounded-3xl p-4 sm:p-6 shadow-[0_16px_48px_rgba(0,0,0,0.08)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)] overflow-y-auto text-slate-800 dark:text-[#e8e8ed]"
           >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -644,7 +644,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         <div className="absolute inset-0 bg-slate-50/80 dark:bg-[#0a0a0f]/80 backdrop-blur-md flex flex-col items-center justify-center z-10 gap-3">
           <div className="relative">
             <div className="w-14 h-14 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-            <Sliders className="w-5 h-5 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+            <Sliders className="xiaoluo-panorama-loading-icon w-5 h-5 text-indigo-600 absolute animate-pulse" />
           </div>
           <div className="text-center">
             <p className="text-slate-800 dark:text-[#e8e8ed] text-sm font-black">正在载入球面全景空间...</p>
