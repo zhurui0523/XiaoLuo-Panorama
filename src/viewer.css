@@ -69,11 +69,113 @@
   color: #14141c;
 }
 
+.xiaoluo-panorama-viewer[data-theme='dark']
+  .xiaoluo-panorama-pro-panel
+  input[type='range'] {
+  background-color: #20202b;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-toolbar {
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-toolbar-button {
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-toolbar-button svg,
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-toolbar-icon-button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-toolbar-icon-button {
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-zoom {
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.625rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-exit {
+  gap: 0.25rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-pro-panel {
+  width: calc(100% - 2rem);
+  max-width: 16rem;
+  padding: 0.875rem;
+  border-radius: 0.5rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-pro-title,
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-shift-title,
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-arch-capture {
+  font-size: 0.6875rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-shift-card {
+  padding: 0.625rem;
+  border-radius: 0.375rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-shift-description {
+  font-size: 0.5rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-shift-toggle {
+  width: 2rem;
+  height: 1.125rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-shift-knob {
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact
+  .xiaoluo-panorama-shift-toggle[data-checked='true']
+  .xiaoluo-panorama-shift-knob {
+  left: 1rem;
+}
+
+.xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-arch-capture {
+  gap: 0.375rem;
+  padding-block: 0.4375rem;
+  border-radius: 0.375rem;
+}
+
 @media (min-width: 640px) {
   .xiaoluo-panorama-pro-panel {
     top: 6rem;
     right: 1.5rem;
     width: 18rem;
     max-height: calc(100% - 12rem);
+  }
+
+  .xiaoluo-panorama-viewer.xiaoluo-panorama-compact .xiaoluo-panorama-pro-panel {
+    top: 4rem;
+    width: 16rem;
+    max-height: calc(100% - 8rem);
   }
 }

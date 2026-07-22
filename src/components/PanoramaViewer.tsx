@@ -397,7 +397,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         <div className="flex items-center gap-1.5 border-r border-slate-100 dark:border-[#2a2a3a] pr-2 sm:pr-4">
           <button
             onClick={toggleWalking}
-            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+            className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               isWalking 
                 ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" 
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
@@ -410,7 +410,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
           <button
             onClick={() => setShowProTools(!showProTools)}
-            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
+            className={`xiaoluo-panorama-toolbar-button flex items-center gap-2 px-2 sm:px-4 py-2 rounded-full transition-all text-xs font-black active:scale-95 ${
               showProTools 
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
                 : "text-slate-600 dark:text-[#aaaabc] hover:bg-slate-50 dark:hover:bg-[#252535]"
@@ -426,7 +426,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           <button
             onClick={() => takeSnapshot()}
             disabled={snapshotting || loading}
-            className={`p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 ${
+            className={`xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 ${
               snapshotting || loading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             title="捕获当前视角截图"
@@ -436,7 +436,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           
           <button
             onClick={downloadOriginal}
-            className="p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
+            className="xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title="下载原始等距柱状全景大图"
           >
             <Download className="w-4 h-4" />
@@ -444,7 +444,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           
           <button
             onClick={toggleFullscreen}
-            className="p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
+            className="xiaoluo-panorama-toolbar-icon-button p-2.5 hover:bg-slate-50 dark:hover:bg-[#252535] text-slate-600 dark:text-[#aaaabc] rounded-full transition-all active:scale-95 md:block hidden"
             title={isFullscreen ? "退出全屏" : "全屏模式"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -452,7 +452,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         </div>
 
         {/* Zoom Indicator - Matching Image 1 style: - 100% + */}
-        <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
+        <div className="xiaoluo-panorama-zoom flex items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-[#252535] px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-black text-slate-600 dark:text-[#e8e8ed] select-none">
           <button 
             onClick={() => setFov(Math.min(150, fov + 5))}
             className="text-slate-400 dark:text-[#8888a0] hover:text-slate-700 dark:hover:text-[#e8e8ed] transition-colors"
@@ -493,7 +493,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-indigo-600" />
-                <h4 className="text-slate-800 dark:text-[#e8e8ed] font-black text-xs uppercase tracking-wider">高级相机参数</h4>
+                <h4 className="xiaoluo-panorama-pro-title text-slate-800 dark:text-[#e8e8ed] font-black text-xs uppercase tracking-wider">高级相机参数</h4>
               </div>
               <button 
                 onClick={resetProTools}
@@ -506,18 +506,19 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
             <div className="space-y-5">
               {/* Shift Lens Mode Toggle */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#1a1a26] rounded-2xl border border-slate-100 dark:border-[#2a2a3a]">
+              <div className="xiaoluo-panorama-shift-card flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#1a1a26] rounded-2xl border border-slate-100 dark:border-[#2a2a3a]">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-700 dark:text-[#e8e8ed] font-black text-xs">移轴模式 (Shift Lens)</span>
-                  <span className="text-[9px] text-slate-400 dark:text-[#8888a0]">锁定水平视线，矫正建筑垂直畸变</span>
+                  <span className="xiaoluo-panorama-shift-title text-slate-700 dark:text-[#e8e8ed] font-black text-xs">移轴模式 (Shift Lens)</span>
+                  <span className="xiaoluo-panorama-shift-description text-[9px] text-slate-400 dark:text-[#8888a0]">锁定水平视线，矫正建筑垂直畸变</span>
                 </div>
                 <button 
                   onClick={() => setIsShiftMode(!isShiftMode)}
-                  className={`w-9 h-5 rounded-full transition-all relative ${
+                  data-checked={isShiftMode}
+                  className={`xiaoluo-panorama-shift-toggle w-9 h-5 rounded-full transition-all relative ${
                     isShiftMode ? "bg-indigo-600" : "bg-slate-200 dark:bg-[#2a2a3a]"
                   }`}
                 >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
+                  <div className={`xiaoluo-panorama-shift-knob absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
                     isShiftMode ? "left-4.5" : "left-0.5"
                   }`} />
                 </button>
@@ -587,7 +588,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-[#2a2a3a] space-y-2">
               <button 
                 onClick={takeArchitecturalCapture}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 dark:shadow-none rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="xiaoluo-panorama-arch-capture w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 dark:shadow-none rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 <Camera className="w-3.5 h-3.5" />
                 <span>移轴平面截图 (Arch-Capture)</span>
