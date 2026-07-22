@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     dts({
       insertTypesEntry: true,
-      include: ['src/components/**/*', 'src/index.ts', 'src/types.ts'],
+      include: ['src/components/**/*', 'src/index.ts', 'src/core.ts', 'src/types.ts'],
       compilerOptions: {
         noEmit: false,
       }
@@ -32,6 +32,8 @@ export default defineConfig({
       external: [
         'react',
         'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
         'motion',
         'motion/react',
         'lucide-react',
@@ -41,6 +43,8 @@ export default defineConfig({
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
+          'react/jsx-runtime': 'ReactJSXRuntime',
+          'react/jsx-dev-runtime': 'ReactJSXDevRuntime',
           motion: 'Motion',
           'motion/react': 'MotionReact',
           'lucide-react': 'LucideReact',

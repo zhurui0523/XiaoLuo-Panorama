@@ -83,6 +83,35 @@ export default function App() {
 
 ## 🔧 API 参考
 
+### 嵌入式核心 `PanoramaCore`
+
+节点、卡片和宿主应用应优先使用无界面核心入口。核心只负责全景渲染与交互，不创建全屏蒙层、不下载文件，也不会修改全局 Canvas API。宿主可以通过 ref 控制视角、重置、聚焦、响应尺寸变化和获取当前视角截图。
+
+```tsx
+import { useRef } from 'react';
+import {
+  PanoramaCore,
+  type PanoramaCoreHandle,
+} from 'xiaoluo-vr-panorama/core';
+import 'xiaoluo-vr-panorama/core.css';
+
+export function EmbeddedPanorama({ imageUrl }: { imageUrl: string }) {
+  const viewerRef = useRef<PanoramaCoreHandle>(null);
+
+  return (
+    <div style={{ width: 480, aspectRatio: '2 / 1' }}>
+      <PanoramaCore
+        ref={viewerRef}
+        imageUrl={imageUrl}
+        onError={(message) => console.error(message)}
+      />
+    </div>
+  );
+}
+```
+
+键盘缩放由 Pannellum 限定在获得焦点的查看器容器中。需要应用级全屏、下载、持久化或自定义工具栏时，由宿主组合 `PanoramaCore` 的 imperative API；完整的独立浏览体验仍可使用根入口导出的 `PanoramaViewer`。
+
 ### 1. `PanoramaViewer`
 
 全景浏览器核心渲染组件。

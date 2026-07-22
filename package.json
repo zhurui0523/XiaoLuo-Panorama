@@ -13,6 +13,11 @@
       "import": "./dist/xiaoluo-vr-panorama.js",
       "require": "./dist/xiaoluo-vr-panorama.umd.cjs"
     },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./core.css": "./dist/core.css",
     "./dist/style.css": "./dist/xiaoluo-vr-panorama.css"
   },
   "files": [
@@ -21,7 +26,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "build:lib": "vite build --config vite.lib.config.ts",
+    "build:lib": "vite build --config vite.lib.config.ts && vite build --config vite.core.config.ts",
+    "prepare": "npm run build:lib",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
